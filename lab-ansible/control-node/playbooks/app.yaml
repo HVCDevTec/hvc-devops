@@ -1,0 +1,122 @@
+---
+- name: Java application configuration
+  hosts: app
+
+  user: vagrant
+  become: true
+
+  vars:
+    dbhost: "db01"
+    dbname: "notes"
+    dbusername: "notesapp"
+    dbpassword: "devopslab01"
+
+  tasks:
+    - name: Ansible lan hosts configuration
+      lineinfile:
+        line: "{{ item }}"
+        path: "/etc/hosts"
+        state: present
+      with_items:
+        - 192.168.56.2 control-node
+        - 192.168.56.3 app01
+        - 192.168.56.4 db01
+
+    - name: Add appuser
+      user:
+        name: appuser
+        state: present
+        shell: /bin/bash
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      
+    - name: Maven installation
+      apt:
+        name: maven
+        state: present
+
+    - name: Java installation
+      apt:
+        name: openjdk-8-jdk
+        state: present
+
+    - name: App direcetory creation
+      file:
+        path: /opt/notes
+        state: directory
+        owner: appuser
+        group: appuser
+
+    - name: Install git client
+      apt:
+        name: git
+        state: latest
+      with_items:
+        - vim
+        - git
+        - curl
+        - wget
+        - net-tools
+    
+    - name: Configure git safe directory
+      command: git config --global --add safe.directory /opt/notes
+
+    - name: Download notes application
+      git:
+        repo: "https://github.com/callicoder/spring-boot-mysql-rest-api-tutorial.git"
+        dest: /opt/notes
+        version: master
+        force: yes
+  
+    - name: Set application ownership
+      file:
+        path: /opt/notes
+        owner: appuser
+        group: appuser
+        recurse: yes
+    
+    - name: App properties configuration
+      template:
+        src: templates/application.properties
+        dest: /opt/notes/src/main/resources/application.properties
+        owner: appuser
+        group: appuser
+        mode: 0644
+
+    - name: Generate notes application jar
+      command: mvn -f /opt/notes/pom.xml package
+      become_user: appuser
+
+    - name: Register notes version
+      shell: |
+        grep -m1 '<version>' pom.xml | sed 's/<[^>]*>//g' | xargs
+      args:
+        chdir: /opt/notes
+      register: notes_version
+      become_user: appuser
+
+    - name: Configure systemd service for notes application
+      template:
+        src: templates/etc/systemd/system/notes.service
+        dest: /etc/systemd/system/notes.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - daemon-reload
+
+    - name: Start notes application service
+      systemd:
+        name: notes
+        state: restarted
+        enabled: yes
+
+  roles:
+    - so-default-configuration
+  handlers:
+  - name: daemon-reload
+    ansible.builtin.systemd:
+      daemon_reload: yes

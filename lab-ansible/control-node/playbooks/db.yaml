@@ -1,0 +1,30 @@
+
+---
+- name: Database server configuration
+  hosts: db01
+
+  user: vagrant
+  become: true
+
+  vars_files:
+    - vars/main.yaml
+
+  vars:
+    dbname: "notes"
+    dbusername: "notesapp"
+    dbpassword: "devopslab01"
+
+  tasks:
+    - name: Ansible lan hosts configuration
+      lineinfile:
+        line: "{{ item }}"
+        path: "/etc/hosts"
+        state: present
+      with_items:
+        - 192.168.56.2 control-node
+        - 192.168.56.3 app01
+        - 192.168.56.4 db01
+
+  roles:
+    - so-default-configuration
+    - geerlingguy.mysql

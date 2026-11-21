@@ -1,0 +1,4 @@
+- name: SO packages upgrade
+  apt:
+    upgrade: dist
+    update_cache: yes
